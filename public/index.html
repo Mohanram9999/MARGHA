@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Marga</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+<style>
+:root{--bg:#0e1a2b;--bg2:#16304a;--ink:#eef4fb;--mute:#8fa6bf;--beam:#7dffd4;--amber:#ffb84d;--card:#1b3553}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family:system-ui,-apple-system,"Segoe UI",sans-serif;overflow:hidden}
+#root{height:100%}
+.app{height:100%;display:flex;flex-direction:column;padding-top:env(safe-area-inset-top,0px);background:radial-gradient(120% 70% at 50% 25%,var(--bg2),var(--bg))}
+header{display:flex;justify-content:space-between;align-items:center;padding:12px 18px}
+h1{margin:0;font-size:26px;font-weight:700;letter-spacing:.5px}
+.iconbtn{width:42px;height:42px;border-radius:50%;border:1px solid #2c4c70;background:#12263d;color:var(--ink);display:grid;place-items:center}
+.stage{flex:0 0 46%;display:flex;flex-direction:column;align-items:center;justify-content:center;position:relative}
+.stage svg{width:min(78vw,320px);height:auto;overflow:visible}
+.status{margin-top:4px;font-size:15px;color:var(--mute);min-height:22px;text-align:center;padding:0 20px}
+.tap{position:absolute;inset:0;background:none;border:0;width:100%}
+.ufo{animation:hover 3s ease-in-out infinite}
+@keyframes hover{50%{transform:translateY(-6px)}}
+.beam{opacity:0;transform-origin:50% 0}
+.listening .beam{animation:flash .55s ease-in-out infinite alternate}
+@keyframes flash{from{opacity:.15}to{opacity:.85}}
+.listening .ufo{animation:hover 1s ease-in-out infinite}
+.lights circle{animation:blink 1.6s steps(1) infinite}
+.lights circle:nth-child(2){animation-delay:.5s}.lights circle:nth-child(3){animation-delay:1s}
+@keyframes blink{50%{fill:#ffffff}}
+.bot{transform-origin:50% 100%;animation:idle 4s ease-in-out infinite}
+@keyframes idle{50%{transform:translateY(-3px)}}
+.listening .bot{animation:bounce .5s ease-in-out infinite alternate}
+@keyframes bounce{to{transform:translateY(-8px) scale(1.03)}}
+.listening .eye{animation:wide .5s infinite alternate}
+@keyframes wide{to{transform:scaleY(1.35)}}
+.thinking .antenna{animation:spin 1s linear infinite;transform-origin:center;transform-box:fill-box}
+@keyframes spin{to{transform:rotate(360deg)}}
+.bottom{flex:1;overflow-y:auto;scroll-snap-type:y proximity;padding:8px 16px calc(24px + env(safe-area-inset-bottom,0px));background:#0b1626;border-radius:26px 26px 0 0;border-top:1px solid #23415f}
+.grab{width:44px;height:4px;background:#2c4c70;border-radius:2px;margin:6px auto 12px}
+.hint{text-align:center;color:var(--mute);font-size:13px;margin-bottom:10px}
+.needs{display:grid;grid-template-columns:1fr 1fr;gap:10px;scroll-snap-align:start}
+.need{display:flex;align-items:center;gap:10px;padding:14px;border-radius:16px;border:1px solid #2c4c70;background:var(--card);color:var(--ink);font-size:16px;font-weight:600;text-align:left}
+.need span.e{font-size:22px}
+.need.on{border-color:var(--beam);background:#14474a}
+.need.help{grid-column:span 2;background:#4a2230;border-color:#9b4058}
+.results{margin-top:18px;display:flex;flex-direction:column;gap:10px}
+.results h2{margin:0 0 2px;font-size:17px}
+.res{padding:14px;border-radius:16px;background:var(--card);border-left:4px solid var(--amber)}
+.res b{display:block;font-size:16px}
+.res small{color:var(--mute);font-size:14px}
+.res .row{display:flex;justify-content:space-between;gap:8px;margin-top:6px;font-size:14px}
+.res a{color:var(--beam);font-weight:600;text-decoration:none}
+.empty{color:var(--mute);font-size:14px;text-align:center;padding:12px}
+.panel{position:fixed;top:0;right:0;bottom:0;width:min(88vw,380px);background:#102238;border-left:1px solid #2c4c70;transform:translateX(105%);transition:transform .28s ease;display:flex;flex-direction:column;padding-top:env(safe-area-inset-top,0px);z-index:5}
+.panel.open{transform:none}
+.phead{display:flex;justify-content:space-between;align-items:center;padding:14px 16px;font-weight:700}
+.msgs{flex:1;overflow-y:auto;padding:8px 16px;display:flex;flex-direction:column;gap:8px}
+.m{max-width:85%;padding:10px 12px;border-radius:14px;font-size:15px;line-height:1.35}
+.m.u{align-self:flex-end;background:#1f5d63}.m.b{align-self:flex-start;background:var(--card)}
+.pin{display:flex;gap:8px;padding:12px 12px calc(12px + env(safe-area-inset-bottom,0px))}
+.pin input{flex:1;padding:12px;border-radius:12px;border:1px solid #2c4c70;background:#0b1626;color:var(--ink);font-size:16px}
+.pin button{padding:0 16px;border-radius:12px;border:0;background:var(--beam);color:#06231c;font-weight:700}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useRef } = React;
+
+// Leave "" when the page is served by the same Render service as the API.
+const API_BASE = "";
+
+const NEEDS = [
+  { id: "eat", label: "Eat now", e: "🍽️" },
+  { id: "restroom", label: "Restroom", e: "🚻" },
+  { id: "atm", label: "ATM", e: "🏧" },
+  { id: "pharmacy", label: "Pharmacy", e: "💊" },
+  { id: "back", label: "Get back", e: "🧭" },
+  { id: "events", label: "Events", e: "🎫" },
+  { id: "help", label: "Help", e: "🆘" },
+];
+
+const DEMO = [
+  { name: "Nearest option", detail: "Backend not connected, showing sample result", distance: "250 m", link: "" },
+  { name: "Second option", detail: "Open now", distance: "400 m", link: "" },
+];
+
+async function askMarga(query, need) {
+  const pos = await new Promise((res) => {
+    if (!navigator.geolocation) return res(null);
+    navigator.geolocation.getCurrentPosition(
+      (p) => res({ lat: p.coords.latitude, lng: p.coords.longitude }),
+      () => res(null),
+      { timeout: 4000 }
+    );
+  });
+  try {
+    const r = await fetch(API_BASE + "/api/ask", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ query, need, ...pos }),
+    });
+    if (!r.ok) throw new Error("bad status");
+    const d = await r.json();
+    return { reply: d.reply || "Here is what I found.", results: d.results || [] };
+  } catch (e) {
+    return { reply: "I can't reach the server, so these are sample results.", results: DEMO };
+  }
+}
+
+function speak(text) {
+  try {
+    if (!window.speechSynthesis) return;
+    speechSynthesis.cancel();
+    speechSynthesis.speak(new SpeechSynthesisUtterance(text));
+  } catch (e) {}
+}
+
+function Agent({ mode }) {
+  return (
+    <svg viewBox="0 0 300 330" aria-hidden="true">
+      <defs>
+        <linearGradient id="bm" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor="#7dffd4" stopOpacity=".9" />
+          <stop offset="1" stopColor="#7dffd4" stopOpacity="0" />
+        </linearGradient>
+        <linearGradient id="hull" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor="#c9d8e8" /><stop offset="1" stopColor="#6f88a3" />
+        </linearGradient>
+      </defs>
+      <polygon className="beam" points="125,68 175,68 235,250 65,250" fill="url(#bm)" />
+      <g className="ufo">
+        <ellipse cx="150" cy="42" rx="26" ry="18" fill="#9fe8ff" opacity=".85" />
+        <ellipse cx="150" cy="58" rx="62" ry="15" fill="url(#hull)" />
+        <g className="lights" fill="var(--amber)">
+          <circle cx="112" cy="60" r="4" /><circle cx="150" cy="64" r="4" /><circle cx="188" cy="60" r="4" />
+        </g>
+      </g>
+      <g className="bot">
+        <line x1="150" y1="138" x2="150" y2="122" stroke="#8fa6bf" strokeWidth="4" />
+        <circle className="antenna" cx="150" cy="118" r="7" fill="var(--amber)" />
+        <rect x="95" y="138" width="110" height="88" rx="30" fill="#dbe7f3" />
+        <rect x="108" y="152" width="84" height="56" rx="20" fill="#0e1a2b" />
+        <g fill="var(--beam)">
+          <ellipse className="eye" cx="133" cy="174" rx="7" ry="9" style={{transformBox:"fill-box",transformOrigin:"center"}} />
+          <ellipse className="eye" cx="167" cy="174" rx="7" ry="9" style={{transformBox:"fill-box",transformOrigin:"center"}} />
+        </g>
+        <path d={mode === "talking" ? "M136 194 Q150 207 164 194 Q150 199 136 194Z" : "M138 195 Q150 202 162 195"} stroke="var(--beam)" strokeWidth="3" fill={mode === "talking" ? "var(--beam)" : "none"} strokeLinecap="round" />
+        <rect x="112" y="226" width="76" height="46" rx="16" fill="#b7c9dc" />
+        <rect x="80" y="232" width="20" height="10" rx="5" fill="#b7c9dc" />
+        <rect x="200" y="232" width="20" height="10" rx="5" fill="#b7c9dc" />
+        <rect x="122" y="272" width="22" height="16" rx="6" fill="#8fa6bf" />
+        <rect x="156" y="272" width="22" height="16" rx="6" fill="#8fa6bf" />
+      </g>
+    </svg>
+  );
+}
+
+function App() {
+  const [mode, setMode] = useState("idle");
+  const [status, setStatus] = useState("Tap Marga and say what you need");
+  const [need, setNeed] = useState(null);
+  const [results, setResults] = useState(null);
+  const [chatOpen, setChatOpen] = useState(false);
+  const [msgs, setMsgs] = useState([{ r: "b", t: "Hi, I'm Marga. Ask me anything about where you are." }]);
+  const [text, setText] = useState("");
+  const recRef = useRef(null);
+  const bottomRef = useRef(null);
+
+  const run = async (query, needId) => {
+    setMode("thinking");
+    setStatus("Looking for " + query + "…");
+    setMsgs(m => [...m, { r: "u", t: query }]);
+    const { reply, results } = await askMarga(query, needId);
+    setResults(results);
+    setMsgs(m => [...m, { r: "b", t: reply }]);
+    setStatus(reply);
+    setMode("talking");
+    speak(reply);
+    setTimeout(() => setMode("idle"), 2500);
+    setTimeout(() => bottomRef.current && bottomRef.current.scrollIntoView({ behavior: "smooth", block: "start" }), 150);
+  };
+
+  const listen = () => {
+    if (mode === "listening") { recRef.current && recRef.current.stop(); return; }
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) { setStatus("Voice isn't supported in this browser. Use the labels below or the chat icon."); return; }
+    const rec = new SR();
+    rec.lang = "en-US";
+    rec.interimResults = true;
+    let finalText = "";
+    rec.onstart = () => { setMode("listening"); setStatus("Listening…"); };
+    rec.onresult = e => {
+      const t = Array.from(e.results).map(r => r[0].transcript).join(" ");
+      finalText = t;
+      setStatus("“" + t + "”");
+    };
+    rec.onerror = () => { setMode("idle"); setStatus("I couldn't hear that. Tap and try again."); };
+    rec.onend = () => { if (finalText) run(finalText, null); else setMode("idle"); };
+    recRef.current = rec;
+    rec.start();
+  };
+
+  const pick = n => { setNeed(n.id); run(n.label, n.id); };
+
+  const send = () => {
+    const q = text.trim();
+    if (!q) return;
+    setText("");
+    run(q, null);
+  };
+
+  return (
+    <div className={"app " + mode}>
+      <header>
+        <h1>Marga</h1>
+        <button className="iconbtn" aria-label="Open chat" onClick={() => setChatOpen(true)}>
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z" /></svg>
+        </button>
+      </header>
+
+      <section className="stage">
+        <Agent mode={mode} />
+        <div className="status" aria-live="polite">{status}</div>
+        <button className="tap" aria-label="Tap to speak" onClick={listen} />
+      </section>
+
+      <section className="bottom">
+        <div className="grab" />
+        <div className="hint">Swipe up for quick needs</div>
+        <div className="needs">
+          {NEEDS.map(n => (
+            <button key={n.id} className={"need" + (n.id === "help" ? " help" : "") + (need === n.id ? " on" : "")} onClick={() => pick(n)}>
+              <span className="e">{n.e}</span>{n.label}
+            </button>
+          ))}
+        </div>
+
+        <div className="results" ref={bottomRef}>
+          <h2>{results ? "Results" : ""}</h2>
+          {results && results.length === 0 && <div className="empty">Nothing found nearby. Try another need.</div>}
+          {results && results.map((r, i) => (
+            <div className="res" key={i}>
+              <b>{r.name}</b>
+              <small>{r.detail}</small>
+              <div className="row">
+                <span>{r.distance}</span>
+                {r.link ? <a href={r.link} target="_blank" rel="noopener">Directions</a> : null}
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <aside className={"panel" + (chatOpen ? " open" : "")}>
+        <div className="phead">
+          <span>Chat with Marga</span>
+          <button className="iconbtn" aria-label="Close chat" onClick={() => setChatOpen(false)}>✕</button>
+        </div>
+        <div className="msgs">{msgs.map((m, i) => <div key={i} className={"m " + m.r}>{m.t}</div>)}</div>
+        <div className="pin">
+          <input value={text} onChange={e => setText(e.target.value)} onKeyDown={e => e.key === "Enter" && send()} placeholder="Type a message" />
+          <button onClick={send}>Send</button>
+        </div>
+      </aside>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>
