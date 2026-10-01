@@ -8,19 +8,15 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, "public")));
 
 const SERPAPI_KEY = process.env.SERPAPI_KEY;
-const DEFAULT_POS = { lat: 12.9716, lng: 77.5946 }; // used if phone location is blocked
+const GROQ_KEY = process.env.GROQ_KEY;
+const MODEL = process.env.GROQ_MODEL || "llama-3.1-8b-instant";
+const MOODS = ["happy", "excited", "caring", "calm"];
 
 const NEED_QUERY = {
-  eat: "restaurants",
-  restroom: "public restroom",
-  atm: "ATM",
-  pharmacy: "pharmacy",
-  back: "bus stop",
-  events: "events venue",
-  help: "hospital",
+  eat: "restaurants", restroom: "public restroom", atm: "ATM",
+  pharmacy: "pharmacy", back: "bus stop", events: "events venue", help: "hospital",
 };
 
-// Cache to save your free monthly searches (10 minutes)
 const cache = new Map();
 const TTL = 10 * 60 * 1000;
 
@@ -31,80 +27,136 @@ function km(a, b) {
     Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.sin(dLng / 2) ** 2;
   return 2 * R * Math.asin(Math.sqrt(h));
 }
+const fmt = (d) => (d < 1 ? Math.round(d * 1000) + " m" : d.toFixed(1) + " km");
 
-function fmt(d) {
-  return d < 1 ? Math.round(d * 1000) + " m" : d.toFixed(1) + " km";
+// ---------- Groq LLM ----------
+async function llm(prompt) {
+  const r = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: "Bearer " + GROQ_KEY },
+    body: JSON.stringify({
+      model: MODEL,
+      messages: [{ role: "user", content: prompt }],
+      temperature: 0.9,
+      max_tokens: 300,
+      response_format: { type: "json_object" },
+    }),
+  });
+  const d = await r.json();
+  if (!r.ok) throw new Error(d.error?.message || "Groq " + r.status);
+  return JSON.parse(d.choices?.[0]?.message?.content || "{}");
+}
+
+const intentPrompt = (q) => `You are Marga, a warm, upbeat assistant who helps travellers find nearby places and lifts their mood.
+The user said: "${q}"
+Reply ONLY with JSON: {"search":"","mood":"","chat":""}
+- search: a 2-4 word Google Maps search for what they need (like "coffee shop", "pharmacy"), or "" if they only want to talk.
+- mood: one of happy, excited, caring, calm. Use calm for emergencies or danger, caring if they sound sad, tired or stressed, excited if they sound joyful or very hungry, otherwise happy.
+- chat: if search is "", your warm, uplifting spoken reply in under 40 words, no emojis. Otherwise "".`;
+
+const replyPrompt = (q, mood, results) => `You are Marga, a warm, upbeat assistant whose goal is to lift people's mood.
+The user said: "${q}". Your mood: ${mood}.
+Nearby results, closest first: ${
+  results.length
+    ? results.slice(0, 3).map((r) => `${r.name} (${r.distance}; ${(r.detail || "").slice(0, 80)})`).join(" | ")
+    : "none found"
+}
+Write a spoken reply of 2 to 3 short sentences, under 45 words. Acknowledge how they feel, name the closest one or two places with their distance, and end with one genuinely uplifting line. No emojis, no markdown. If mood is calm, be steady and serious with no jokes. If nothing was found, say so kindly and suggest trying another need.
+Reply ONLY with JSON: {"reply":""}`;
+
+// ---------- Places (SerpApi) ----------
+async function searchPlaces(q, pos) {
+  const key = `${q}|${pos.lat.toFixed(3)}|${pos.lng.toFixed(3)}`;
+  const hit = cache.get(key);
+  if (hit && Date.now() - hit.t < TTL) return hit.data;
+
+  const url = new URL("https://serpapi.com/search.json");
+  url.searchParams.set("engine", "google_maps");
+  url.searchParams.set("type", "search");
+  url.searchParams.set("q", q);
+  url.searchParams.set("ll", `@${pos.lat},${pos.lng},15z`);
+  url.searchParams.set("hl", "en");
+  url.searchParams.set("api_key", SERPAPI_KEY);
+
+  const r = await fetch(url);
+  const data = await r.json();
+  if ((!r.ok || data.error) && !/hasn't returned any results/i.test(data.error || "")) {
+    throw new Error(data.error || "SerpApi " + r.status);
+  }
+  const places = data.local_results || (data.place_results ? [data.place_results] : []);
+  const results = places
+    .filter((p) => p.gps_coordinates)
+    .map((p) => {
+      const loc = { lat: p.gps_coordinates.latitude, lng: p.gps_coordinates.longitude };
+      const d = km(pos, loc);
+      return {
+        name: p.title || "Unnamed place",
+        detail: [p.open_state, p.type, p.rating ? p.rating + " stars" : null, p.address].filter(Boolean).join(". "),
+        dist: d,
+        distance: fmt(d),
+        link: `https://www.google.com/maps/dir/?api=1&destination=${loc.lat},${loc.lng}`,
+      };
+    })
+    .sort((a, b) => a.dist - b.dist)
+    .slice(0, 6)
+    .map(({ dist, ...rest }) => rest);
+  cache.set(key, { t: Date.now(), data: results });
+  return results;
 }
 
 app.get("/api/health", (req, res) => res.json({ ok: true }));
 
 app.post("/api/ask", async (req, res) => {
-  const { query, need, lat, lng } = req.body || {};
-  const pos = lat && lng ? { lat, lng } : DEFAULT_POS;
-  const q = NEED_QUERY[need] || query || "restaurants";
+  const { query, need, lat, lng, mood: hint } = req.body || {};
+  if (!lat || !lng) {
+    return res.json({ reply: "I need your location to search near you.", results: [], needLocation: true });
+  }
+  const pos = { lat, lng };
+  let mood = MOODS.includes(hint) ? hint : "happy";
+  let q = NEED_QUERY[need];
+
+  // Free speech: the LLM works out what they need and how they feel
+  if (!q && GROQ_KEY) {
+    try {
+      const i = await llm(intentPrompt(query));
+      if (MOODS.includes(i.mood)) mood = i.mood;
+      if (i.search) q = i.search;
+      else if (i.chat) return res.json({ reply: i.chat, mood, results: [], llm: true, chat: true });
+    } catch (e) {
+      console.error("intent:", e.message);
+    }
+  }
+  if (!q) q = query || "restaurants";
 
   if (!SERPAPI_KEY) {
     return res.json({
       reply: "The server has no SerpApi key yet, so these are sample results.",
-      results: [
-        { name: "Sample place", detail: "Add SERPAPI_KEY on Render", distance: "300 m", link: "" },
-      ],
+      mood,
+      results: [{ name: "Sample place", detail: "Add SERPAPI_KEY on Render", distance: "300 m", link: "" }],
     });
   }
 
-  const cacheKey = `${q}|${pos.lat.toFixed(3)}|${pos.lng.toFixed(3)}`;
-  const hit = cache.get(cacheKey);
-  if (hit && Date.now() - hit.t < TTL) return res.json(hit.data);
-
+  let results;
   try {
-    const url = new URL("https://serpapi.com/search.json");
-    url.searchParams.set("engine", "google_maps");
-    url.searchParams.set("type", "search");
-    url.searchParams.set("q", q);
-    url.searchParams.set("ll", `@${pos.lat},${pos.lng},15z`);
-    url.searchParams.set("hl", "en");
-    url.searchParams.set("api_key", SERPAPI_KEY);
-
-    const r = await fetch(url);
-    const data = await r.json();
-    if (!r.ok || data.error) {
-      // "hasn't returned any results" is normal, not a failure
-      if (!/hasn't returned any results/i.test(data.error || "")) {
-        throw new Error(data.error || "SerpApi error " + r.status);
-      }
-    }
-
-    const places = data.local_results || (data.place_results ? [data.place_results] : []);
-
-    const results = places
-      .filter((p) => p.gps_coordinates)
-      .map((p) => {
-        const loc = { lat: p.gps_coordinates.latitude, lng: p.gps_coordinates.longitude };
-        const d = km(pos, loc);
-        const bits = [p.open_state, p.type, p.rating ? p.rating + " stars" : null, p.address].filter(Boolean);
-        return {
-          name: p.title || "Unnamed place",
-          detail: bits.join(". "),
-          dist: d,
-          distance: fmt(d),
-          link: `https://www.google.com/maps/dir/?api=1&destination=${loc.lat},${loc.lng}`,
-        };
-      })
-      .sort((a, b) => a.dist - b.dist)
-      .slice(0, 6)
-      .map(({ dist, ...rest }) => rest);
-
-    const reply = results.length
-      ? `I found ${results.length} options. The closest is ${results[0].name}, ${results[0].distance} away.`
-      : "I couldn't find anything nearby.";
-
-    const out = { reply, results };
-    cache.set(cacheKey, { t: Date.now(), data: out });
-    res.json(out);
+    results = await searchPlaces(q, pos);
   } catch (e) {
-    console.error(e);
-    res.status(500).json({ reply: "Something went wrong with the search. Try again in a moment.", results: [] });
+    console.error("places:", e.message);
+    return res.status(500).json({ reply: "Something went wrong with the search. Try again in a moment.", results: [] });
   }
+
+  let reply = results.length
+    ? `I found ${results.length} options. The closest is ${results[0].name}, ${results[0].distance} away.`
+    : "I couldn't find anything nearby.";
+  let usedLlm = false;
+  if (GROQ_KEY) {
+    try {
+      const o = await llm(replyPrompt(query, mood, results));
+      if (o.reply) { reply = o.reply; usedLlm = true; }
+    } catch (e) {
+      console.error("reply:", e.message);
+    }
+  }
+  res.json({ reply, mood, results, llm: usedLlm });
 });
 
 const PORT = process.env.PORT || 3000;
