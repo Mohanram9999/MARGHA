@@ -94,7 +94,10 @@ h1{margin:0;font-size:26px;font-weight:700;letter-spacing:.5px}
 </style>
 </head>
 <body>
-<div id="root"></div>
+<div id="root"><p style="color:#8fa6bf;font:16px system-ui;padding:24px">Loading Marga… (first load can take up to a minute)</p></div>
+<script>
+window.addEventListener("error",function(e){var r=document.getElementById("root");r.innerHTML='<pre style="color:#ffb3b3;font:13px monospace;padding:16px;white-space:pre-wrap">Error: '+e.message+'</pre>';});
+</script>
 <script type="text/babel">
 const { useState, useRef, useEffect } = React;
 const API_BASE = "";
