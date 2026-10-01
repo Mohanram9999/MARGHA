@@ -47,6 +47,13 @@ async function llm(prompt) {
   return JSON.parse(d.choices?.[0]?.message?.content || "{}");
 }
 
+const feelPrompt = (q, need) => `You are Marga, a warm, upbeat companion whose goal is to lift people's mood.
+The user ${need ? `tapped the "${q}" button` : `said: "${q}"`}.
+Reply ONLY with JSON: {"mood":"","comfort":"","search":""}
+- mood: happy, excited, caring or calm (calm for emergencies or danger, caring if sad, tired or stressed, excited if joyful or very hungry, else happy).
+- comfort: 1 or 2 short spoken sentences, under 30 words. First show you understand how they feel, then gently suggest or encourage what they need, like a friend. No emojis. If calm, be steady and serious, no jokes.
+- search: a 2-4 word Google Maps search for what they need, or "" if they only want to talk (then comfort is your full reply).`;
+
 const intentPrompt = (q) => `You are Marga, a warm, upbeat assistant who helps travellers find nearby places and lifts their mood.
 The user said: "${q}"
 Reply ONLY with JSON: {"search":"","mood":"","chat":""}
@@ -61,7 +68,7 @@ Nearby results, closest first: ${
     ? results.slice(0, 3).map((r) => `${r.name} (${r.distance}; ${(r.detail || "").slice(0, 80)})`).join(" | ")
     : "none found"
 }
-Write a spoken reply of 2 to 3 short sentences, under 45 words. Acknowledge how they feel, name the closest one or two places with their distance, and end with one genuinely uplifting line. No emojis, no markdown. If mood is calm, be steady and serious with no jokes. If nothing was found, say so kindly and suggest trying another need.
+Write a spoken reply of 2 to 3 short sentences, under 45 words. You already comforted them, so do not repeat that. Name the closest one or two places with their distance, and end with one genuinely uplifting line. No emojis, no markdown. If mood is calm, be steady and serious with no jokes. If nothing was found, say so kindly and suggest trying another need.
 Reply ONLY with JSON: {"reply":""}`;
 
 // ---------- Places (SerpApi) ----------
@@ -104,18 +111,38 @@ async function searchPlaces(q, pos) {
   return results;
 }
 
+// ---------- Routes ----------
 app.get("/api/health", (req, res) => res.json({ ok: true }));
 
+// Step 1: feel the user's mood and comfort them (spoken before searching)
+app.post("/api/feel", async (req, res) => {
+  const { query, need } = req.body || {};
+  if (!GROQ_KEY) return res.json({ llm: false });
+  try {
+    const f = await llm(feelPrompt(query, need));
+    res.json({
+      llm: true,
+      mood: MOODS.includes(f.mood) ? f.mood : "happy",
+      comfort: f.comfort || "",
+      search: NEED_QUERY[need] || f.search || "",
+    });
+  } catch (e) {
+    console.error("feel:", e.message);
+    res.json({ llm: false });
+  }
+});
+
+// Step 2: search for the need and announce results
 app.post("/api/ask", async (req, res) => {
-  const { query, need, lat, lng, mood: hint } = req.body || {};
+  const { query, need, lat, lng, mood: hint, search } = req.body || {};
   if (!lat || !lng) {
     return res.json({ reply: "I need your location to search near you.", results: [], needLocation: true });
   }
   const pos = { lat, lng };
   let mood = MOODS.includes(hint) ? hint : "happy";
-  let q = NEED_QUERY[need];
+  let q = NEED_QUERY[need] || search;
 
-  // Free speech: the LLM works out what they need and how they feel
+  // Fallback: if /api/feel did not run, let the LLM work out the need here
   if (!q && GROQ_KEY) {
     try {
       const i = await llm(intentPrompt(query));
