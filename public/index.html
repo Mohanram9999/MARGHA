@@ -23,7 +23,6 @@ h1{margin:0;font-size:26px;font-weight:700;letter-spacing:.5px}
 .status{margin-top:6px;font-size:14px;color:var(--mute);text-align:center;padding:0 20px;position:relative;z-index:2;pointer-events:none;min-height:18px}
 .loc{position:relative;z-index:2;margin-top:6px;background:none;border:1px solid #2c4c70;color:var(--mute);border-radius:14px;padding:3px 12px;font-size:12px}
 .tap{position:absolute;inset:0;background:none;border:0;width:100%}
-/* floating bubbles */
 .bubble{position:relative;z-index:2;pointer-events:none;max-width:88%;margin-top:12px;padding:10px 14px;border-radius:18px;background:rgba(27,53,83,.95);border:1px solid var(--mc);font-size:15px;line-height:1.35;text-align:center;max-height:132px;overflow:hidden;animation:pop .35s cubic-bezier(.2,1.4,.4,1),bob 3.5s ease-in-out .4s infinite}
 .bubble:before{content:"";position:absolute;top:-7px;left:50%;margin-left:-6px;width:12px;height:12px;background:#1b3553;border-left:1px solid var(--mc);border-top:1px solid var(--mc);transform:rotate(45deg)}
 @keyframes pop{from{opacity:0;transform:scale(.6) translateY(14px)}}
@@ -33,7 +32,6 @@ h1{margin:0;font-size:26px;font-weight:700;letter-spacing:.5px}
 @keyframes dot{50%{transform:translateY(-6px);opacity:.4}}
 .ubub{position:absolute;right:12px;bottom:4px;z-index:3;pointer-events:none;max-width:60%;padding:8px 12px;border-radius:16px 16px 4px 16px;background:#1f5d63;font-size:14px;animation:flyup 2.8s ease-out forwards}
 @keyframes flyup{0%{opacity:0;transform:translateY(20px) scale(.7)}15%{opacity:1;transform:none}80%{opacity:1}100%{opacity:0;transform:translateY(-80px)}}
-/* agent animation */
 .ufo{animation:hover 3s ease-in-out infinite}
 @keyframes hover{50%{transform:translateY(-6px)}}
 .beam{opacity:0;transform-origin:50% 0}
@@ -46,10 +44,7 @@ h1{margin:0;font-size:26px;font-weight:700;letter-spacing:.5px}
 @keyframes blink{50%{fill:#fff}}
 .bot{transform-origin:50% 100%;animation:idle 4s ease-in-out infinite}
 @keyframes idle{50%{transform:translateY(-3px)}}
-.listening .bot{animation:bounce .5s ease-in-out infinite alternate}
-.m-excited.talking .bot{animation:bounce .4s ease-in-out infinite alternate}
-.m-caring.talking .bot{animation:sway 1.6s ease-in-out infinite}
-@keyframes sway{50%{transform:rotate(3deg)}}
+.listening .bot,.m-excited.talking .bot{animation:bounce .5s ease-in-out infinite alternate}
 @keyframes bounce{to{transform:translateY(-8px) scale(1.03)}}
 .listening .eye{animation:wide .5s infinite alternate}
 @keyframes wide{to{transform:scaleY(1.35)}}
@@ -60,10 +55,6 @@ h1{margin:0;font-size:26px;font-weight:700;letter-spacing:.5px}
 .mouth{transform-box:fill-box;transform-origin:center top}
 .talk{animation:talk .22s ease-in-out infinite alternate}
 @keyframes talk{to{transform:scaleY(1.7)}}
-.fx{position:absolute;left:0;right:0;top:34%;height:100px;pointer-events:none;z-index:1}
-.fx span{position:absolute;bottom:0;font-size:24px;opacity:0;animation:rise 2.4s ease-out infinite}
-@keyframes rise{20%{opacity:1}to{opacity:0;transform:translateY(-90px) rotate(20deg)}}
-/* bottom area */
 .bottom{flex:1;overflow-y:auto;scroll-snap-type:y proximity;padding:8px 16px calc(24px + env(safe-area-inset-bottom,0px));background:#0b1626;border-radius:26px 26px 0 0;border-top:1px solid #23415f}
 .grab{width:44px;height:4px;background:#2c4c70;border-radius:2px;margin:6px auto 12px}
 .hint{text-align:center;color:var(--mute);font-size:13px;margin-bottom:10px}
@@ -80,7 +71,6 @@ h1{margin:0;font-size:26px;font-weight:700;letter-spacing:.5px}
 .res .row{display:flex;justify-content:space-between;gap:8px;margin-top:6px;font-size:14px}
 .res a{color:var(--mc);font-weight:600;text-decoration:none}
 .empty{color:var(--mute);font-size:14px;text-align:center;padding:12px}
-/* chat panel */
 .panel{position:fixed;top:0;right:0;bottom:0;width:min(88vw,380px);background:#102238;border-left:1px solid #2c4c70;transform:translateX(105%);transition:transform .28s ease;display:flex;flex-direction:column;padding-top:env(safe-area-inset-top,0px);z-index:5}
 .panel.open{transform:none}
 .phead{display:flex;justify-content:space-between;align-items:center;padding:14px 16px;font-weight:700}
@@ -90,13 +80,18 @@ h1{margin:0;font-size:26px;font-weight:700;letter-spacing:.5px}
 .pin{display:flex;gap:8px;padding:12px 12px calc(12px + env(safe-area-inset-bottom,0px))}
 .pin input{flex:1;padding:12px;border-radius:12px;border:1px solid #2c4c70;background:#0b1626;color:var(--ink);font-size:16px}
 .pin button{padding:0 16px;border-radius:12px;border:0;background:var(--mc);color:#06231c;font-weight:700}
+.splash{position:fixed;inset:0;z-index:9;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;background:radial-gradient(120% 80% at 50% 30%,var(--bg2),var(--bg));border:0;color:var(--ink);width:100%;transition:opacity .6s}
+.splash.hide{opacity:0;pointer-events:none}
+.splash svg{width:min(60vw,250px);height:auto}
+.splash h1{font-size:38px}
+.splash p{margin:0;color:var(--mute);font-size:16px;animation:bob 2s ease-in-out infinite}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 </style>
 </head>
 <body>
-<div id="root"><p style="color:#8fa6bf;font:16px system-ui;padding:24px">Loading Marga… (first load can take up to a minute)</p></div>
+<div id="root"><p style="color:#8fa6bf;font:16px system-ui;padding:24px">Loading Marga… (the first load can take up to a minute)</p></div>
 <script>
-window.addEventListener("error",function(e){var r=document.getElementById("root");r.innerHTML='<pre style="color:#ffb3b3;font:13px monospace;padding:16px;white-space:pre-wrap">Error: '+e.message+'</pre>';});
+window.addEventListener("error",function(e){var r=document.getElementById("root");if(r&&r.children.length<2)r.innerHTML='<pre style="color:#ffb3b3;font:13px monospace;padding:16px;white-space:pre-wrap">Error: '+e.message+'</pre>';});
 </script>
 <script type="text/babel">
 const { useState, useRef, useEffect } = React;
@@ -113,13 +108,13 @@ const NEEDS = [
 ];
 
 const MOOD = {
-  happy:   { tag: "😊 Happy", pitch: 1.25, rate: 1.05, fx: ["✨", "😊", "✨"], mouth: "M136 194 Q150 207 164 194", fill: false,
+  happy:   { tag: "😊 Happy", pitch: 1.2, rate: 1.05, mouth: "M136 194 Q150 207 164 194", fill: false,
     open: ["Great choice!", "I love helping with this!"], close: ["Hope this makes your day better!", "Go enjoy it, you deserve it!"] },
-  excited: { tag: "🤩 Excited", pitch: 1.45, rate: 1.12, fx: ["🎉", "✨", "🎊"], mouth: "M131 191 Q150 219 169 191Z", fill: true,
+  excited: { tag: "🤩 Excited", pitch: 1.4, rate: 1.12, mouth: "M131 191 Q150 219 169 191Z", fill: true,
     open: ["Oh yes, this is going to be so good!", "I'm so excited to help!"], close: ["Have an amazing time!", "Go get it, champion!"] },
-  caring:  { tag: "🤗 Caring", pitch: 1.0, rate: 0.9, fx: ["💛", "🌸", "💛"], mouth: "M139 197 Q150 204 161 197", fill: false,
+  caring:  { tag: "🤗 Caring", pitch: 1.0, rate: 0.9, mouth: "M139 197 Q150 204 161 197", fill: false,
     open: ["I'm here with you. Take a deep breath.", "Don't worry, we'll sort this out together."], close: ["You're doing better than you think.", "Small steps count, and I'm cheering for you."] },
-  calm:    { tag: "💙 Calm", pitch: 0.95, rate: 0.88, fx: ["🌿", "💙", "🌿"], mouth: "M139 197 Q150 201 161 197", fill: false,
+  calm:    { tag: "💙 Calm", pitch: 0.95, rate: 0.88, mouth: "M139 197 Q150 201 161 197", fill: false,
     open: ["Stay calm, I'm right here. You're not alone."], close: ["Please stay safe. If it is urgent, call your local emergency number."] },
 };
 
@@ -154,7 +149,7 @@ async function askFeel(query, need, history) {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ query, need, history }),
       }).then(x => x.json()),
-      new Promise(res => setTimeout(() => res(null), 8000)),
+      new Promise(res => setTimeout(() => res(null), 9000)),
     ]);
     return r && r.llm ? r : null;
   } catch (e) { return null; }
@@ -192,7 +187,7 @@ function Agent({ mode, mood }) {
       <g className="ufo">
         <ellipse cx="150" cy="42" rx="26" ry="18" fill="#9fe8ff" opacity=".85" />
         <ellipse cx="150" cy="58" rx="62" ry="15" fill="url(#hull)" />
-        <g className="lights" fill="var(--amber)">
+        <g className="lights" fill="#ffb84d">
           <circle cx="112" cy="60" r="4" /><circle cx="150" cy="64" r="4" /><circle cx="188" cy="60" r="4" />
         </g>
       </g>
@@ -201,8 +196,8 @@ function Agent({ mode, mood }) {
         <circle className="antenna" cx="150" cy="118" r="7" fill="var(--mc)" />
         <rect x="95" y="138" width="110" height="88" rx="30" fill="#dbe7f3" />
         <rect x="108" y="152" width="84" height="56" rx="20" fill="#0e1a2b" />
-        <circle cx="118" cy="193" r="6" fill="#ff7aa8" opacity={warm ? 0.6 : 0} style={{ transition: "opacity .3s" }} />
-        <circle cx="182" cy="193" r="6" fill="#ff7aa8" opacity={warm ? 0.6 : 0} style={{ transition: "opacity .3s" }} />
+        <circle cx="118" cy="193" r="6" fill="#ff7aa8" opacity={warm ? 0.6 : 0} />
+        <circle cx="182" cy="193" r="6" fill="#ff7aa8" opacity={warm ? 0.6 : 0} />
         <g style={{ fill: "var(--mc)" }}>
           <ellipse className="eye" cx="133" cy="174" rx="7" ry="9" style={{ transformBox: "fill-box", transformOrigin: "center" }} />
           <ellipse className="eye" cx="167" cy="174" rx="7" ry="9" style={{ transformBox: "fill-box", transformOrigin: "center" }} />
@@ -220,9 +215,10 @@ function Agent({ mode, mood }) {
 }
 
 function App() {
+  const [started, setStarted] = useState(false);
   const [mode, setMode] = useState("idle");
   const [mood, setMood] = useState("happy");
-  const [status, setStatus] = useState("Tap me and tell me what you need");
+  const [status, setStatus] = useState("");
   const [bubble, setBubble] = useState("");
   const [ub, setUb] = useState(null);
   const [need, setNeed] = useState(null);
@@ -230,11 +226,12 @@ function App() {
   const [loc, setLoc] = useState("finding");
   const [fxKey, setFxKey] = useState(0);
   const [chatOpen, setChatOpen] = useState(false);
-  const [msgs, setMsgs] = useState([{ r: "b", t: "Hi, I'm Marga. Ask me anything, or tell me what you need nearby." }]);
+  const [msgs, setMsgs] = useState([]);
   const [text, setText] = useState("");
   const recRef = useRef(null);
   const posRef = useRef(null);
   const histRef = useRef([]);
+  const runRef = useRef(0);
   const bottomRef = useRef(null);
   const endRef = useRef(null);
 
@@ -269,7 +266,26 @@ function App() {
     setTimeout(() => setMode("idle"), 3500);
   };
 
+  // First tap: unlock speech, then greet like a friend
+  const start = async () => {
+    setStarted(true);
+    try { speechSynthesis.speak(new SpeechSynthesisUtterance("")); } catch (e) {}
+    const id = ++runRef.current;
+    const h = new Date().getHours();
+    const part = h < 5 ? "late at night" : h < 12 ? "morning" : h < 17 ? "afternoon" : h < 21 ? "evening" : "night";
+    setMode("thinking");
+    const f = await askFeel("Hey Marga! The app just opened and it is " + part + ". Greet me like my close friend, ask how I'm doing, and ask what I need.", null, []);
+    if (id !== runRef.current) return;
+    const m = f && MOOD[f.mood] ? f.mood : "happy";
+    const hello = f && f.say ? f.say : "Hey there, friend! I'm Marga, and I'm so happy you're here. How are you doing today? Tell me what you need, or just chat with me.";
+    await say(m, hello);
+    if (id !== runRef.current) return;
+    setMode("idle");
+    setStatus("Tap me to talk");
+  };
+
   const run = async (query, needId) => {
+    const id = ++runRef.current;
     setMsgs(x => [...x, { r: "u", t: query }]);
     setUb({ t: query, k: Date.now() });
     setBubble(""); setStatus("");
@@ -279,30 +295,34 @@ function App() {
     const hist = histRef.current.slice(-8);
     histRef.current.push({ role: "user", content: query });
     const f = await askFeel(query, needId, hist);
+    if (id !== runRef.current) return;
     if (f && MOOD[f.mood]) m = f.mood;
 
-    if (f && f.type === "chat" && !needId) {            // just talking: answer like an LLM
+    if (f && f.type === "chat" && !needId) {
       await say(m, f.say);
-      setTimeout(() => setMode("idle"), 800);
+      if (id === runRef.current) setTimeout(() => setMode("idle"), 800);
       return;
     }
     const comfort = f && f.say ? f.say : pick(MOOD[m].open) + " Let me find that for you.";
-    const spoke = say(m, comfort);                      // 1) speak first
+    const spoke = say(m, comfort);
     const pos = await posP;
     if (!pos) {
       await spoke;
       return finish("caring", "I need your location to find things near you. Please allow location in your browser, then tap the location button and ask me again.", null);
     }
-    const d = await askMarga(query, needId, pos, m, f && f.search);   // 2) search while she talks
-    await spoke;                                        // 3) announce results
+    const d = await askMarga(query, needId, pos, m, f && f.search);
+    await spoke;
+    if (id !== runRef.current) return;
     const fm = d.mood && MOOD[d.mood] ? d.mood : m;
     finish(fm, d.llm ? d.reply : d.reply + " " + pick(MOOD[fm].close), d.results);
   };
 
   const listen = () => {
     if (mode === "listening") { recRef.current && recRef.current.stop(); return; }
+    runRef.current++;
+    try { speechSynthesis.cancel(); } catch (e) {}
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SR) { setStatus("Voice isn't supported here. Use the labels below or the chat icon."); return; }
+    if (!SR) { setMode("idle"); setStatus("Voice isn't supported here. Use the labels below or the chat icon."); return; }
     const rec = new SR();
     rec.lang = "en-US"; rec.interimResults = true;
     let finalText = "";
@@ -323,6 +343,12 @@ function App() {
 
   return (
     <div className={"app m-" + mood + " " + mode}>
+      <button className={"splash" + (started ? " hide" : "")} onClick={start} aria-label="Tap to meet Marga">
+        <Agent mode="idle" mood="happy" />
+        <h1>Marga</h1>
+        <p>Tap to meet your friend</p>
+      </button>
+
       <header>
         <h1>Marga</h1>
         <button className="iconbtn" aria-label="Open chat" onClick={() => setChatOpen(true)}>
@@ -332,11 +358,6 @@ function App() {
 
       <section className="stage">
         <Agent mode={mode} mood={mood} />
-        {mode === "talking" && (
-          <div className="fx" key={fxKey}>
-            {MOOD[mood].fx.map((f, i) => <span key={i} style={{ left: (22 + i * 28) + "%", animationDelay: (i * 0.4) + "s" }}>{f}</span>)}
-          </div>
-        )}
         <div className="chip">{MOOD[mood].tag}</div>
         {mode === "thinking"
           ? <div className="bubble"><i /><i /><i /></div>
@@ -348,7 +369,7 @@ function App() {
       </section>
 
       <section className="bottom">
-         <div className="grab" />
+        <div className="grab" />
         <div className="hint">Swipe up for quick needs</div>
         <div className="needs">
           {NEEDS.map(n => (
