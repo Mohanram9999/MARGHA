@@ -9,7 +9,8 @@ app.use(express.static(path.join(__dirname, "public")));
 
 const SERPAPI_KEY = process.env.SERPAPI_KEY;
 const GROQ_KEY = process.env.GROQ_KEY;
-const MODEL = process.env.GROQ_MODEL || "llama-3.1-8b-instant";
+const MODEL = process.env.GROQ_MODEL || "llama-3.3-70b-versatile";
+const FAST = process.env.GROQ_FAST_MODEL || "llama-3.1-8b-instant";
 const MOODS = ["happy", "excited", "caring", "calm"];
 
 const NEED_QUERY = {
@@ -29,47 +30,45 @@ function km(a, b) {
 }
 const fmt = (d) => (d < 1 ? Math.round(d * 1000) + " m" : d.toFixed(1) + " km");
 
-// ---------- Groq LLM ----------
-async function llm(prompt) {
-  const r = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: "Bearer " + GROQ_KEY },
-    body: JSON.stringify({
-      model: MODEL,
-      messages: [{ role: "user", content: prompt }],
-      temperature: 0.9,
-      max_tokens: 300,
-      response_format: { type: "json_object" },
-    }),
-  });
-  const d = await r.json();
-  if (!r.ok) throw new Error(d.error?.message || "Groq " + r.status);
-  return JSON.parse(d.choices?.[0]?.message?.content || "{}");
+// ---------- Groq: smart model first, fast model as fallback ----------
+async function llm(messages, max = 350) {
+  let err;
+  for (const model of [MODEL, FAST]) {
+    try {
+      const r = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: "Bearer " + GROQ_KEY },
+        body: JSON.stringify({
+          model, messages, temperature: 0.8, max_tokens: max,
+          response_format: { type: "json_object" },
+        }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error?.message || "Groq " + r.status);
+      return JSON.parse(d.choices?.[0]?.message?.content || "{}");
+    } catch (e) {
+      err = e;
+      console.error("llm", model, e.message);
+    }
+  }
+  throw err;
 }
 
-const feelPrompt = (q, need) => `You are Marga, a warm, upbeat companion whose goal is to lift people's mood.
-The user ${need ? `tapped the "${q}" button` : `said: "${q}"`}.
-Reply ONLY with JSON: {"mood":"","comfort":"","search":""}
-- mood: happy, excited, caring or calm (calm for emergencies or danger, caring if sad, tired or stressed, excited if joyful or very hungry, else happy).
-- comfort: 1 or 2 short spoken sentences, under 30 words. First show you understand how they feel, then gently suggest or encourage what they need, like a friend. No emojis. If calm, be steady and serious, no jokes.
-- search: a 2-4 word Google Maps search for what they need, or "" if they only want to talk (then comfort is your full reply).`;
+const PERSONA = `You are Marga, a friendly, upbeat AI voice guide for travellers. You help people find nearby food, restrooms, ATMs, pharmacies, transport, events and emergency help, and you lift their mood. You are spoken aloud, so be natural, warm and brief. No emojis, no markdown.`;
 
-const intentPrompt = (q) => `You are Marga, a warm, upbeat assistant who helps travellers find nearby places and lifts their mood.
-The user said: "${q}"
-Reply ONLY with JSON: {"search":"","mood":"","chat":""}
-- search: a 2-4 word Google Maps search for what they need (like "coffee shop", "pharmacy"), or "" if they only want to talk.
-- mood: one of happy, excited, caring, calm. Use calm for emergencies or danger, caring if they sound sad, tired or stressed, excited if they sound joyful or very hungry, otherwise happy.
-- chat: if search is "", your warm, uplifting spoken reply in under 40 words, no emojis. Otherwise "".`;
+const FEEL_RULES = `Decide what the user wants and reply ONLY with JSON: {"type":"","mood":"","say":"","search":""}
+- type "chat": greetings, questions about you, general questions, or feelings with no place needed. say = a direct, helpful answer in under 50 words (answer the question first, then add a warm line). search = "".
+- type "search": they need a nearby place. say = 1 or 2 sentences, under 30 words, showing you understand how they feel and gently suggesting what they need. search = a 2-4 word Google Maps query.
+- mood: happy, excited, caring or calm. calm for emergencies or danger, caring if sad, tired or stressed, excited if joyful or very hungry, else happy. If calm, be steady and serious.
+Examples:
+"who are you" -> {"type":"chat","mood":"happy","say":"I'm Marga, your friendly AI travel guide. I find food, restrooms, ATMs and more near you, and I'm here to brighten your day.","search":""}
+"I'm starving" -> {"type":"search","mood":"excited","say":"Oh, an empty stomach is no fun! Let's get you something tasty right now.","search":"restaurants"}`;
 
-const replyPrompt = (q, mood, results) => `You are Marga, a warm, upbeat assistant whose goal is to lift people's mood.
-The user said: "${q}". Your mood: ${mood}.
-Nearby results, closest first: ${
-  results.length
-    ? results.slice(0, 3).map((r) => `${r.name} (${r.distance}; ${(r.detail || "").slice(0, 80)})`).join(" | ")
-    : "none found"
-}
-Write a spoken reply of 2 to 3 short sentences, under 45 words. You already comforted them, so do not repeat that. Name the closest one or two places with their distance, and end with one genuinely uplifting line. No emojis, no markdown. If mood is calm, be steady and serious with no jokes. If nothing was found, say so kindly and suggest trying another need.
-Reply ONLY with JSON: {"reply":""}`;
+const cleanHistory = (h) =>
+  (Array.isArray(h) ? h : [])
+    .filter((m) => m && (m.role === "user" || m.role === "assistant") && typeof m.content === "string")
+    .slice(-8)
+    .map((m) => ({ role: m.role, content: m.content.slice(0, 300) }));
 
 // ---------- Places (SerpApi) ----------
 async function searchPlaces(q, pos) {
@@ -112,18 +111,25 @@ async function searchPlaces(q, pos) {
 }
 
 // ---------- Routes ----------
-app.get("/api/health", (req, res) => res.json({ ok: true }));
+app.get("/api/health", (req, res) => res.json({ ok: true, groq: !!GROQ_KEY, serpapi: !!SERPAPI_KEY }));
 
-// Step 1: feel the user's mood and comfort them (spoken before searching)
+// Step 1: understand the user: chat answer, or comfort + search term
 app.post("/api/feel", async (req, res) => {
-  const { query, need } = req.body || {};
+  const { query, need, history } = req.body || {};
   if (!GROQ_KEY) return res.json({ llm: false });
   try {
-    const f = await llm(feelPrompt(query, need));
+    const user = need ? `[The user tapped the "${query}" button]` : String(query || "").slice(0, 400);
+    const f = await llm([
+      { role: "system", content: PERSONA + "\n" + FEEL_RULES },
+      ...cleanHistory(history),
+      { role: "user", content: user },
+    ]);
+    const type = need || f.type === "search" ? "search" : "chat";
     res.json({
       llm: true,
+      type,
       mood: MOODS.includes(f.mood) ? f.mood : "happy",
-      comfort: f.comfort || "",
+      say: f.say || (type === "chat" ? "I'm here! Ask me for food, restrooms, ATMs and more." : ""),
       search: NEED_QUERY[need] || f.search || "",
     });
   } catch (e) {
@@ -132,28 +138,15 @@ app.post("/api/feel", async (req, res) => {
   }
 });
 
-// Step 2: search for the need and announce results
+// Step 2: search for the need and announce the results
 app.post("/api/ask", async (req, res) => {
   const { query, need, lat, lng, mood: hint, search } = req.body || {};
   if (!lat || !lng) {
     return res.json({ reply: "I need your location to search near you.", results: [], needLocation: true });
   }
   const pos = { lat, lng };
-  let mood = MOODS.includes(hint) ? hint : "happy";
-  let q = NEED_QUERY[need] || search;
-
-  // Fallback: if /api/feel did not run, let the LLM work out the need here
-  if (!q && GROQ_KEY) {
-    try {
-      const i = await llm(intentPrompt(query));
-      if (MOODS.includes(i.mood)) mood = i.mood;
-      if (i.search) q = i.search;
-      else if (i.chat) return res.json({ reply: i.chat, mood, results: [], llm: true, chat: true });
-    } catch (e) {
-      console.error("intent:", e.message);
-    }
-  }
-  if (!q) q = query || "restaurants";
+  const mood = MOODS.includes(hint) ? hint : "happy";
+  const q = NEED_QUERY[need] || search || query || "restaurants";
 
   if (!SERPAPI_KEY) {
     return res.json({
@@ -177,7 +170,15 @@ app.post("/api/ask", async (req, res) => {
   let usedLlm = false;
   if (GROQ_KEY) {
     try {
-      const o = await llm(replyPrompt(query, mood, results));
+      const list = results.length
+        ? results.slice(0, 3).map((r) => `${r.name} (${r.distance}; ${(r.detail || "").slice(0, 80)})`).join(" | ")
+        : "none found";
+      const o = await llm([
+        { role: "system", content: PERSONA },
+        { role: "user", content: `The user said: "${query}". Your mood: ${mood}. Nearby results, closest first: ${list}
+You already comforted them, so do not repeat that. In 2 or 3 short spoken sentences (under 45 words) name the closest one or two places with their distance, then end with one genuinely uplifting line. If mood is calm, be steady with no jokes. If nothing was found, say so kindly and suggest another need.
+Reply ONLY with JSON: {"reply":""}` },
+      ], 200);
       if (o.reply) { reply = o.reply; usedLlm = true; }
     } catch (e) {
       console.error("reply:", e.message);
