@@ -5,11 +5,15 @@ const path = require("path");
 const app = express();
 app.use(cors());
 app.use(express.json());
+require("./db")(app);
+require("./trip")(app);
+require("./admin")(app);
+require("./auth")(app);
 app.use(express.static(path.join(__dirname, "public")));
 
 const SERPAPI_KEY = process.env.SERPAPI_KEY;
 const GROQ_KEY = process.env.GROQ_KEY;
-const MODEL = process.env.GROQ_MODEL || "llama-3.3-70b-versatile";
+const MODEL = process.env.GROQ_MODEL || "openai/gpt-oss-120b";
 const FAST = process.env.GROQ_FAST_MODEL || "llama-3.1-8b-instant";
 const MOODS = ["happy", "excited", "caring", "calm"];
 
@@ -30,16 +34,19 @@ function km(a, b) {
 }
 const fmt = (d) => (d < 1 ? Math.round(d * 1000) + " m" : d.toFixed(1) + " km");
 
-// ---------- Groq: smart model first, fast model as fallback ----------
+// ---------- Groq: main model first, fast model as backup ----------
 async function llm(messages, max = 350) {
   let err;
   for (const model of [MODEL, FAST]) {
     try {
+      const oss = model.startsWith("openai/gpt-oss");
       const r = await fetch("https://api.groq.com/openai/v1/chat/completions", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: "Bearer " + GROQ_KEY },
         body: JSON.stringify({
-          model, messages, temperature: 0.8, max_tokens: max,
+          model, messages, temperature: 0.8,
+          max_completion_tokens: max + (oss ? 900 : 0),
+          ...(oss ? { reasoning_effort: "low" } : {}),
           response_format: { type: "json_object" },
         }),
       });
@@ -54,15 +61,18 @@ async function llm(messages, max = 350) {
   throw err;
 }
 
-const PERSONA = `You are Marga, a friendly, upbeat AI voice guide for travellers. You help people find nearby food, restrooms, ATMs, pharmacies, transport, events and emergency help, and you lift their mood. You are spoken aloud, so be natural, warm and brief. No emojis, no markdown.`;
+const PERSONA = `You are Marga, a friendly, upbeat AI voice guide for travellers. You help people find nearby food, restrooms, ATMs, pharmacies, transport, events and emergency help, you plan trips, and you lift their mood. You are spoken aloud, so be natural, warm and brief. No emojis, no markdown.`;
 
 const FEEL_RULES = `Decide what the user wants and reply ONLY with JSON: {"type":"","mood":"","say":"","search":""}
-- type "chat": greetings, questions about you, general questions, or feelings with no place needed. say = a direct, helpful answer in under 50 words (answer the question first, then add a warm line). search = "".
-- type "search": they need a nearby place. say = 1 or 2 sentences, under 30 words, showing you understand how they feel and gently suggesting what they need. search = a 2-4 word Google Maps query.
-- mood: happy, excited, caring or calm. calm for emergencies or danger, caring if sad, tired or stressed, excited if joyful or very hungry, else happy. If calm, be steady and serious.
+You are emotionally intelligent. Notice how the person feels from their words, the time of day and what they need.
+- mood: happy (neutral or pleasant), excited (joyful, celebrating, very hungry, planning fun), caring (sad, tired, stressed, lonely, overwhelmed), calm (emergency, danger, pain, lost, scared). Pick the mood that fits THEM, not a default.
+- say: talk like a close friend, not a customer-service bot. Reflect the feeling in fresh words (never "I understand"), then offer one small helpful suggestion. Use their name at most once, only if natural. Vary your openings and never repeat a phrase used earlier in this chat. Humor only when mood is happy or excited. If caring, be gentle and never fake cheerfulness. If calm, be steady, short and clear, and put safety first.
+- type "chat": greetings, questions about you, general questions, or feelings with no place needed. say = a direct, helpful answer in under 50 words (answer first, then a warm line). search = "".
+- type "search": they need a nearby place. say = 1 or 2 sentences, under 30 words. search = a 2-4 word Google Maps query.
 Examples:
-"who are you" -> {"type":"chat","mood":"happy","say":"I'm Marga, your friendly AI travel guide. I find food, restrooms, ATMs and more near you, and I'm here to brighten your day.","search":""}
-"I'm starving" -> {"type":"search","mood":"excited","say":"Oh, an empty stomach is no fun! Let's get you something tasty right now.","search":"restaurants"}`;
+"who are you" -> {"type":"chat","mood":"happy","say":"I'm Marga, your AI travel buddy. I find food, restrooms, ATMs and plan trips, and I'm happy to keep you company too.","search":""}
+"I'm so tired and my feet hurt" -> {"type":"search","mood":"caring","say":"Ugh, a long day on your feet wears anyone out. Let's find you a cosy spot to sit and rest.","search":"cafe"}
+"I'm starving" -> {"type":"search","mood":"excited","say":"An empty stomach, no way! Let's get something delicious in you right now.","search":"restaurants"}`;
 
 const cleanHistory = (h) =>
   (Array.isArray(h) ? h : [])
@@ -97,6 +107,8 @@ async function searchPlaces(q, pos) {
       const d = km(pos, loc);
       return {
         name: p.title || "Unnamed place",
+        image: p.thumbnail || null,
+        website: p.website || null,
         detail: [p.open_state, p.type, p.rating ? p.rating + " stars" : null, p.address].filter(Boolean).join(". "),
         dist: d,
         distance: fmt(d),
@@ -113,14 +125,13 @@ async function searchPlaces(q, pos) {
 // ---------- Routes ----------
 app.get("/api/health", (req, res) => res.json({ ok: true, groq: !!GROQ_KEY, serpapi: !!SERPAPI_KEY }));
 
-// Step 1: understand the user: chat answer, or comfort + search term
 app.post("/api/feel", async (req, res) => {
-  const { query, need, history } = req.body || {};
+  const { query, need, history, name } = req.body || {};
   if (!GROQ_KEY) return res.json({ llm: false });
   try {
     const user = need ? `[The user tapped the "${query}" button]` : String(query || "").slice(0, 400);
     const f = await llm([
-      { role: "system", content: PERSONA + "\n" + FEEL_RULES },
+      { role: "system", content: PERSONA + (name ? ` The user's name is ${String(name).slice(0, 30)}; use it warmly now and then.` : "") + "\n" + FEEL_RULES },
       ...cleanHistory(history),
       { role: "user", content: user },
     ]);
@@ -138,7 +149,6 @@ app.post("/api/feel", async (req, res) => {
   }
 });
 
-// Step 2: search for the need and announce the results
 app.post("/api/ask", async (req, res) => {
   const { query, need, lat, lng, mood: hint, search } = req.body || {};
   if (!lat || !lng) {
