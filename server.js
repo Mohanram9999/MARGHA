@@ -18,8 +18,9 @@ const FAST = process.env.GROQ_FAST_MODEL || "llama-3.1-8b-instant";
 const MOODS = ["happy", "excited", "caring", "calm"];
 
 const NEED_QUERY = {
-  eat: "restaurants", restroom: "public restroom", atm: "ATM",
-  pharmacy: "pharmacy", back: "bus stop", events: "events venue", help: "hospital",
+  restaurants: "restaurants", bank: "bank", hotels: "hotels", malls: "shopping malls",
+  famous: "famous tourist attractions", hospitals: "hospitals", pharmacy: "pharmacy",
+  back: "bus stop", parks: "parks", events: "events venue",
 };
 
 const cache = new Map();
@@ -116,7 +117,7 @@ async function searchPlaces(q, pos) {
       };
     })
     .sort((a, b) => a.dist - b.dist)
-    .slice(0, 6)
+    .slice(0, 8)
     .map(({ dist, ...rest }) => rest);
   cache.set(key, { t: Date.now(), data: results });
   return results;
@@ -129,7 +130,9 @@ app.post("/api/feel", async (req, res) => {
   const { query, need, history, name } = req.body || {};
   if (!GROQ_KEY) return res.json({ llm: false });
   try {
-    const user = need ? `[The user tapped the "${query}" button]` : String(query || "").slice(0, 400);
+    const user = need === "own"
+      ? `[The user typed this search: "${String(query || "").slice(0, 200)}"]`
+      : need ? `[The user tapped the "${query}" button]` : String(query || "").slice(0, 400);
     const f = await llm([
       { role: "system", content: PERSONA + (name ? ` The user's name is ${String(name).slice(0, 30)}; use it warmly now and then.` : "") + "\n" + FEEL_RULES },
       ...cleanHistory(history),
