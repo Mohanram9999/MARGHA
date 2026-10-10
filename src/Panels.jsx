@@ -28,6 +28,7 @@ export function ResultCard({ r, i }) {
   );
 }
 
+/* Flights, trains (IRCTC), buses, transit and driving links */
 export function TransportBar({ to }) {
   const [from, setFrom] = React.useState("");
   const [dest, setDest] = React.useState(to || "");
@@ -100,39 +101,6 @@ export function TripView({ trip }) {
   );
 }
 
-export function Carousel({ items, onPick, activeId }) {
-  const ref = React.useRef(null);
-  const paused = React.useRef(false);
-  React.useEffect(() => {
-    const t = setInterval(() => {
-      const el = ref.current;
-      if (!el || paused.current) return;
-      const step = el.firstChild ? el.firstChild.offsetWidth + 12 : 200;
-      if (el.scrollLeft + el.clientWidth >= el.scrollWidth - 4) el.scrollTo({ left: 0, behavior: "smooth" });
-      else el.scrollBy({ left: step, behavior: "smooth" });
-    }, 2800);
-    return () => clearInterval(t);
-  }, [items.length]);
-  return (
-    <div className="car" ref={ref}
-      onTouchStart={() => { paused.current = true; }}
-      onTouchEnd={() => setTimeout(() => { paused.current = false; }, 4000)}>
-      {items.map((n, i) => {
-        const img = safe(n.image);
-        return (
-          <button key={n.id} className={"cc " + (n.id === "help" ? "g-help" : "g-" + (i % 6)) + (activeId === n.id ? " on" : "")}
-            style={img ? { backgroundImage: `linear-gradient(to top, rgba(0,0,0,.7), rgba(0,0,0,.05)), url("${img}")` } : undefined}
-            onClick={() => onPick(n)}>
-            <span className="big">{n.e}</span>
-            <b>{n.label}</b>
-            <small>{n.kind === "link" ? "Open website" : "Tap to explore"}</small>
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
 export function AccountView({ account, msg, onSubmit, onLogout }) {
   const [mode, setMode] = React.useState("login");
   const [f, setF] = React.useState({ email: "", name: "", password: "" });
@@ -158,6 +126,84 @@ export function AccountView({ account, msg, onSubmit, onLogout }) {
       <button className="go" onClick={() => onSubmit(mode, f)}>{mode === "login" ? "Log in" : "Create account"}</button>
       {msg && <div className="amsg">{msg}</div>}
       <small className="sum">Your chats follow you to any device you log in on.</small>
+    </div>
+  );
+}
+
+/* ---------- Animated mascot built from plain CSS (no SVG) ---------- */
+export function CssBot() {
+  return (
+    <div className="scene">
+      <div className="beam" />
+      <div className="ufo"><div className="dome" /><div className="hull" /><div className="lamps"><i /><i /><i /></div></div>
+      <div className="robot">
+        <div className="ant" />
+        <div className="head">
+          <div className="face">
+            <b className="eye" /><b className="eye" />
+            <i className="cheek l" /><i className="cheek r" />
+            <span className="mouth" />
+          </div>
+        </div>
+        <div className="body" />
+      </div>
+    </div>
+  );
+}
+
+/* ---------- Moving carousel (loops forever) ---------- */
+export function Marquee({ items, onPick, activeId, reverse }) {
+  const [pause, setPause] = React.useState(false);
+  const loop = [...items, ...items];
+  return (
+    <div className="mq" onTouchStart={() => setPause(true)} onTouchEnd={() => setTimeout(() => setPause(false), 2500)}>
+      <div className={"mqt" + (reverse ? " rev" : "") + (pause ? " pause" : "")} style={{ animationDuration: items.length * 5 + "s" }}>
+        {loop.map((n, i) => (
+          <button key={i} className={"mc g-" + ((i % items.length) % 6) + (activeId === n.id ? " on" : "")} onClick={() => onPick(n)}>
+            {safe(n.image) && <img src={n.image} alt="" loading="lazy" referrerPolicy="no-referrer" onError={(ev) => { ev.currentTarget.style.display = "none"; }} />}
+            <span className="shade" /><span className="big">{n.e}</span><b>{n.label}</b>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ---------- Results popup with Places and Photos tabs ---------- */
+export function ResultsPopup({ open, title, results, fallback, onClose }) {
+  const [tab, setTab] = React.useState("places");
+  React.useEffect(() => { if (open) setTab("places"); }, [open, title]);
+  if (!open) return null;
+  const list = results || [];
+  const pic = (r) => safe(r.image) || safe(fallback);
+  return (
+    <div className="pop" onClick={onClose}>
+      <div className="sheet" onClick={(ev) => ev.stopPropagation()}>
+        <div className="shead">
+          <div><b>{title || "Results"}</b><small>{list.length} found</small></div>
+          <button className="iconbtn" aria-label="Close results" onClick={onClose}>✕</button>
+        </div>
+        <div className="tabs">
+          <button className={"tab" + (tab === "places" ? " on" : "")} onClick={() => setTab("places")}>Places</button>
+          <button className={"tab" + (tab === "photos" ? " on" : "")} onClick={() => setTab("photos")}>Photos</button>
+        </div>
+        <div className="sbody">
+          {list.length === 0 && <div className="empty">Nothing found nearby. Try another search.</div>}
+          {tab === "places" && list.map((r, i) => <ResultCard key={i} r={{ ...r, image: pic(r) }} i={i} />)}
+          {tab === "photos" && (
+            <div className="grid">
+              {list.map((r, i) => (
+                <a key={i} className="ph2" href={safe(r.link) || undefined} target="_blank" rel="noopener noreferrer">
+                  {pic(r)
+                    ? <img src={pic(r)} alt="" loading="lazy" referrerPolicy="no-referrer" onError={(ev) => { ev.currentTarget.style.display = "none"; }} />
+                    : <div className="rimg ico" style={{ width: "100%", height: "100%" }}>📍</div>}
+                  <span>{r.name}</span>
+                </a>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
       }
