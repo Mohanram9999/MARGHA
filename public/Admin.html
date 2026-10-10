@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Marga Admin</title>
+<style>
+body{margin:0;background:#0e1a2b;color:#eef4fb;font-family:system-ui,sans-serif;padding:14px;max-width:760px;margin:auto}
+h1{font-size:22px;margin:4px 0 12px}
+input,select,textarea,button{font:inherit;padding:10px;border-radius:10px;border:1px solid #2c4c70;background:#0b1626;color:#eef4fb;width:100%;margin:4px 0}
+button{width:auto;background:#7dffd4;color:#06231c;font-weight:700;border:0;cursor:pointer}
+button.sec{background:#1b3553;color:#eef4fb;border:1px solid #2c4c70}
+button.del{background:#8a2c3f;color:#fff}
+.tabs{display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap}
+.tabs button{background:#1b3553;color:#8fa6bf}.tabs button.on{background:#7dffd4;color:#06231c}
+.card{background:#1b3553;border-radius:12px;padding:10px;margin:8px 0;font-size:14px}
+.row{display:flex;justify-content:space-between;gap:8px;align-items:center}
+small{color:#8fa6bf}
+.big{font-size:26px;font-weight:700}
+.stats{display:flex;gap:10px}.stats .card{flex:1}
+</style></head><body>
+<h1>Marga Admin</h1>
+<div id="login"><input id="key" type="password" placeholder="Admin key"><button onclick="login()">Enter</button><div id="lerr" style="color:#ffb3b3"></div></div>
+<div id="main" hidden>
+  <div class="tabs" id="tabs"></div>
+  <div id="view"></div>
+</div>
+<script>
+var K = sessionStorage.getItem("mk") || "";
+var tab = "stats";
+var SCHEMA = {
+  buttons: [["label","Label (e.g. Street food)"],["emoji","Emoji (e.g. 🍜)"],["image_url","Photo link (https), optional"],["kind","Type","select",["search","data","link","ask"]],["value","Value: search text / data category / https link / sentence for Marga"],["sort","Order number (0 first)"]],
+  places: [["name","Name"],["category","Category (matches a data button)"],["city","City"],["description","Description","area"],["image_url","Photo link (https)"],["link","Website / booking link (https)"],["lat","Latitude (optional)"],["lng","Longitude (optional)"]]
+};
+function esc(s){ return String(s==null?"":s).replace(/[&<>"']/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];}); }
+function $(id){ return document.getElementById(id); }
+function api(m,p,b){
+  return fetch("/api/admin"+p,{method:m,headers:{"Content-Type":"application/json","x-admin-key":K},body:b?JSON.stringify(b):undefined})
+    .then(function(r){ if(r.status===401) throw new Error("Wrong admin key"); return r.json(); });
+}
+function login(){
+  K = $("key").value.trim(); sessionStorage.setItem("mk", K);
+  api("GET","/stats").then(function(){ $("login").hidden=true; $("main").hidden=false; show("stats"); })
+    .catch(function(e){ $("lerr").textContent = e.message; });
+}
+function show(t){
+  tab = t;
+  $("tabs").innerHTML = ["stats","buttons","places","chats"].map(function(x){
+    return '<button class="'+(x===t?"on":"")+'" onclick="show(\''+x+'\')">'+({stats:"Stats",buttons:"Buttons",places:"Data",chats:"Chats"})[x]+'</button>';
+  }).join("");
+  if(t==="stats") stats(); else if(t==="chats") chats(""); else crud(t);
+}
+function stats(){
+  api("GET","/stats").then(function(d){
+    $("view").innerHTML = '<div class="stats"><div class="card"><div class="big">'+d.users+'</div>users</div><div class="card"><div class="big">'+d.messages+'</div>messages</div></div>'+
+      d.recent.map(function(u){ return '<div class="card row"><div><b>'+esc(u.name||"(no name)")+'</b> <small>'+u.visits+' visits</small><br><small>'+esc(u.id)+'</small></div><button class="sec" onclick="chats(\''+esc(u.id)+'\')">Chats</button></div>'; }).join("");
+  }).catch(function(e){ $("view").textContent = e.message; });
+}
+function chats(u){
+  tab="chats";
+  api("GET","/messages"+(u?"?user="+encodeURIComponent(u):"")).then(function(list){
+    $("view").innerHTML = '<small>'+(u?"User "+esc(u):"Latest chats, all users")+'</small>'+
+      list.map(function(m){ return '<div class="card"><small>'+esc(m.role)+' · '+esc(m.mood||"")+' · '+esc(m.created_at)+'</small><br>'+esc(m.content)+'</div>'; }).join("");
+  }).catch(function(e){ $("view").textContent = e.message; });
+}
+function crud(table){
+  api("GET","/"+table).then(function(rows){
+    var form = '<div class="card" id="form"><input type="hidden" id="f_id">'+SCHEMA[table].map(function(f){
+      if(f[2]==="select") return '<label><small>'+f[1]+'</small></label><select id="f_'+f[0]+'">'+f[3].map(function(o){return "<option>"+o+"</option>";}).join("")+'</select>';
+      if(f[2]==="area") return '<textarea id="f_'+f[0]+'" rows="3" placeholder="'+f[1]+'"></textarea>';
+      return '<input id="f_'+f[0]+'" placeholder="'+f[1]+'">';
+    }).join("")+'<button onclick="save(\''+table+'\')">Save</button> <button class="sec" onclick="crud(\''+table+'\')">Clear</button></div>';
+    var list = rows.map(function(r){
+      var title = table==="buttons" ? esc((r.emoji||"")+" "+r.label)+' <small>'+esc(r.kind)+': '+esc(r.value)+'</small>' : '<b>'+esc(r.name)+'</b> <small>'+esc(r.category||"")+' · '+esc(r.city||"")+'</small>';
+      return '<div class="card row"><div>'+title+'</div><div><button class="sec" onclick=\'edit("'+table+'",'+r.id+')\'>Edit</button> <button class="del" onclick="del(\''+table+'\','+r.id+')">Delete</button></div></div>';
+    }).join("");
+    $("view").innerHTML = form + list;
+    window._rows = rows;
+  }).catch(function(e){ $("view").textContent = e.message; });
+}
+function edit(table,id){
+  var r = (window._rows||[]).filter(function(x){return x.id===id;})[0]; if(!r) return;
+  $("f_id").value = id;
+  SCHEMA[table].forEach(function(f){ $("f_"+f[0]).value = r[f[0]]==null?"":r[f[0]]; });
+  window.scrollTo(0,0);
+}
+function save(table){
+  var b = {}; SCHEMA[table].forEach(function(f){ b[f[0]] = $("f_"+f[0]).value; });
+  var id = $("f_id").value;
+  api(id?"PATCH":"POST","/"+table+(id?"/"+id:""),b).then(function(){ crud(table); }).catch(function(e){ alert(e.message); });
+}
+function del(table,id){
+  if(!confirm("Delete this?")) return;
+  api("DELETE","/"+table+"/"+id).then(function(){ crud(table); });
+}
+if(K){ $("key").value=K; login(); }
+</script></body></html>
