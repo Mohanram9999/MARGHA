@@ -55,6 +55,15 @@ Rules:
 - tips: 3 short general tips. No markdown.`;
 
 module.exports = function (app) {
+  // Free category photos from Wikipedia for the cards and popup
+  const CAT = { restaurants: "Restaurant", bank: "Bank", hotels: "Hotel", malls: "Shopping mall", famous: "Tourist attraction", hospitals: "Hospital", pharmacy: "Pharmacy", back: "Bus stop", parks: "Park", events: "Festival" };
+  app.get("/api/catimg", async (req, res) => {
+    res.set("Cache-Control", "public, max-age=86400");
+    const out = {};
+    await Promise.all(Object.entries(CAT).map(async ([k, t]) => { out[k] = await wikiImg(t); }));
+    res.json(out);
+  });
+
   app.get("/api/diag", async (req, res) => {
     if (!KEY) return res.json({ groq: false, error: "GROQ_KEY is not set on Render" });
     try {
