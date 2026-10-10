@@ -1,14 +1,18 @@
 import React, { useState, useRef, useEffect } from "react";
 import { createRoot } from "react-dom/client";
-import { ResultCard, TripView, Carousel, AccountView, TransportBar } from "./Panels.jsx";
+import { TripView, AccountView, TransportBar, CssBot, Marquee, ResultsPopup } from "./Panels.jsx";
 
 const API = "";
 
-const NEEDS = [
-  { id: "eat", label: "Eat now", e: "🍽️" }, { id: "restroom", label: "Restroom", e: "🚻" },
-  { id: "atm", label: "ATM", e: "🏧" }, { id: "pharmacy", label: "Pharmacy", e: "💊" },
-  { id: "back", label: "Get back", e: "🧭" }, { id: "events", label: "Events", e: "🎫" },
-  { id: "help", label: "Help", e: "🆘" },
+const ROW1 = [
+  { id: "restaurants", label: "Restaurants", e: "🍽️" }, { id: "bank", label: "Bank", e: "🏦" },
+  { id: "hotels", label: "Hotels", e: "🏨" }, { id: "malls", label: "Shopping Malls", e: "🛍️" },
+  { id: "famous", label: "Famous Places", e: "🏛️" },
+];
+const ROW2 = [
+  { id: "hospitals", label: "Hospitals", e: "🏥" }, { id: "pharmacy", label: "Pharmacies", e: "💊" },
+  { id: "back", label: "Get Back", e: "🧭" }, { id: "parks", label: "Parks", e: "🌳" },
+  { id: "events", label: "Events", e: "🎫" },
 ];
 
 const MOOD = {
@@ -27,9 +31,9 @@ const TRIP_RE = /\b(plan|itinerary|trip|tour|holiday|vacation|getaway)\b/i;
 
 function detectMood(text, need) {
   const t = (text || "").toLowerCase();
-  if (need === "help" || /hurt|emergency|accident|pain|bleed|scared|danger|lost|police/.test(t)) return "calm";
+  if (need === "hospitals" || /hurt|emergency|accident|pain|bleed|scared|danger|lost|police/.test(t)) return "calm";
   if (/tired|sad|stress|bad day|lonely|down|upset|angry|cry|worried|anxious|exhaust/.test(t)) return "caring";
-  if (/hungry|starv|party|fun|celebrat|birthday|awesome|amazing|movie|concert|event/.test(t) || need === "eat" || need === "events") return "excited";
+  if (/hungry|starv|party|fun|celebrat|birthday|awesome|amazing|movie|concert|event/.test(t) || need === "restaurants" || need === "events") return "excited";
   return "happy";
 }
 
@@ -92,22 +96,18 @@ const askMarga = (query, need, p, mood, search) =>
     .then(d => ({ reply: d.reply || "Here is what I found.", results: d.results || [], mood: d.mood, llm: !!d.llm }))
     .catch(() => ({ reply: "I couldn't reach the server. Please try again in a moment.", results: [] }));
 
-/* 3D animation slot: put idle.mp4, listening.mp4, thinking.mp4, talking.mp4 in public/videos/ */
+/* Uses your 3D videos if public/videos/idle.mp4 exists, otherwise the animated CSS mascot */
 function AvatarSlot({ mode }) {
+  const [ok, setOk] = useState(false);
   const [src, setSrc] = useState("/videos/" + mode + ".mp4");
-  const [none, setNone] = useState(false);
-  useEffect(() => { setSrc("/videos/" + mode + ".mp4"); setNone(false); }, [mode]);
-  const onErr = () => {
-    if (!src.endsWith("/idle.mp4")) setSrc("/videos/idle.mp4");
-    else setNone(true);
-  };
-  return (
-    <div className="avatar">
-      {none
-        ? <div className="ph"><b>3D animation here</b><span>Add idle.mp4, listening.mp4, thinking.mp4, talking.mp4 to public/videos/</span></div>
-        : <video key={src} src={src} autoPlay loop muted playsInline onError={onErr} />}
-    </div>
-  );
+  useEffect(() => {
+    fetch("/videos/idle.mp4", { method: "HEAD" })
+      .then(r => setOk(r.ok && /video/.test(r.headers.get("content-type") || "")))
+      .catch(() => {});
+  }, []);
+  useEffect(() => { setSrc("/videos/" + mode + ".mp4"); }, [mode]);
+  if (!ok) return <CssBot />;
+  return <div className="avatar"><video key={src} src={src} autoPlay loop muted playsInline onError={() => setSrc("/videos/idle.mp4")} /></div>;
 }
 
 function App() {
@@ -119,13 +119,17 @@ function App() {
   const [ub, setUb] = useState(null);
   const [need, setNeed] = useState(null);
   const [results, setResults] = useState(null);
+  const [popup, setPopup] = useState(false);
+  const [meta, setMeta] = useState({ title: "", img: null });
+  const [catImgs, setCatImgs] = useState({});
+  const [sq, setSq] = useState("");
   const [loc, setLoc] = useState("finding");
   const [fxKey, setFxKey] = useState(0);
   const [chatOpen, setChatOpen] = useState(false);
   const [msgs, setMsgs] = useState([]);
   const [text, setText] = useState("");
   const [trip, setTrip] = useState(null);
-  const [tab, setTab] = useState("needs");
+  const [tab, setTab] = useState("explore");
   const [custom, setCustom] = useState([]);
   const [account, setAccount] = useState(null);
   const [authMsg, setAuthMsg] = useState("");
@@ -156,6 +160,7 @@ function App() {
   useEffect(() => {
     getPos();
     fetch(API + "/api/health").catch(() => {});
+    fetch(API + "/api/catimg").then(r => r.json()).then(setCatImgs).catch(() => {});
     post("/api/user/init", { uid }).then(d => {
       if (d && d.db) { nameRef.current = d.name || ""; visitsRef.current = d.visits; histRef.current = d.recent || []; }
     });
@@ -173,6 +178,8 @@ function App() {
     });
   }, []);
 
+  const withImg = list => list.map(n => ({ ...n, image: n.image || catImgs[n.id] || null }));
+
   const say = (m, t) => {
     setMood(m); setMsgs(x => [...x, { r: "b", t }]); setBubble(t); setStatus("");
     setM("talking"); setFxKey(k => k + 1);
@@ -184,7 +191,7 @@ function App() {
   const finish = (m, full, res) => {
     const id = runRef.current;
     say(m, full);
-    if (res) { setResults(res); setTab("results"); }
+    if (res) { setResults(res); setPopup(true); }
     setTimeout(() => { if (id === runRef.current) setM("idle"); }, 3500);
   };
 
@@ -224,7 +231,8 @@ function App() {
     const id = ++runRef.current;
     setMsgs(x => [...x, { r: "u", t: query }]);
     setUb({ t: query, k: Date.now() });
-    setBubble(""); setStatus("");
+    setBubble(""); setStatus(""); setPopup(false);
+    if (!needId) setMeta({ title: "Results for “" + query.slice(0, 30) + "”", img: null });
     let m = detectMood(query, needId);
     setMood(m); setM("thinking");
     const posP = getPos();
@@ -262,7 +270,7 @@ function App() {
     runRef.current++;
     try { speechSynthesis.cancel(); } catch (err) {}
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SR) { setM("idle"); setStatus("Voice isn't supported here. Use the cards below or the chat icon."); return; }
+    if (!SR) { setM("idle"); setStatus("Voice isn't supported here. Use the cards or the search box."); return; }
     const rec = new SR();
     rec.lang = "en-US"; rec.interimResults = true;
     let finalText = "";
@@ -279,7 +287,7 @@ function App() {
 
   const runData = async n => {
     const id = ++runRef.current;
-    setM("thinking");
+    setPopup(false); setM("thinking");
     const p = await getPos();
     const d = await fetch(API + "/api/custom?category=" + encodeURIComponent(n.value) + (p ? "&lat=" + p.lat + "&lng=" + p.lng : "")).then(r => r.json()).catch(() => null);
     if (id !== runRef.current) return;
@@ -290,11 +298,19 @@ function App() {
   const pickNeed = n => {
     if (n.kind === "link") { if (/^https:\/\//.test(n.value)) window.open(n.value, "_blank", "noopener"); return; }
     setNeed(n.id);
+    setMeta({ title: n.label, img: n.image || null });
     if (n.kind === "data") return runData(n);
     if (n.kind === "ask") return run(n.value, null);
     run(n.label, n.id, n.kind === "search" ? n.value : undefined);
   };
-  const allNeeds = [...NEEDS.filter(n => n.id !== "help"), ...custom, ...NEEDS.filter(n => n.id === "help")];
+
+  const ownSearch = () => {
+    const q = sq.trim();
+    if (!q) return;
+    setSq(""); setNeed(null);
+    setMeta({ title: "“" + q + "”", img: null });
+    run(q, "own", q);
+  };
 
   const send = () => { const q = text.trim(); if (!q) return; setText(""); run(q, null); };
 
@@ -359,24 +375,23 @@ function App() {
       <section className="bottom">
         <div className="grab" />
         <div className="tabs">
-          {[["needs", "Needs"], ["results", "Results"], ["trip", "Trip"], ["account", "Account"]].map(([k, l]) => (
+          {[["explore", "Explore"], ["trip", "Trip"], ["account", "Account"]].map(([k, l]) => (
             <button key={k} className={"tab" + (tab === k ? " on" : "")} onClick={() => setTab(k)}>{l}</button>
           ))}
         </div>
 
-        {tab === "needs" && (
+        {tab === "explore" && (
           <>
-            <div className="hint">Tap a card, or ask me to plan a trip</div>
-            <Carousel items={allNeeds} activeId={need} onPick={pickNeed} />
+            <div className="sbar">
+              <input value={sq} onChange={e => setSq(e.target.value)} onKeyDown={e => e.key === "Enter" && ownSearch()} placeholder="Search your own: pizza, museum, mechanic…" />
+              <button onClick={ownSearch}>Search</button>
+            </div>
+            <div className="sect">POPULAR NEAR YOU</div>
+            <Marquee items={withImg(ROW1)} onPick={pickNeed} activeId={need} />
+            <div className="sect">MORE</div>
+            <Marquee items={withImg([...ROW2, ...custom])} onPick={pickNeed} activeId={need} reverse />
+            {results && !popup && <button className="last" onClick={() => setPopup(true)}>📋 Show last results</button>}
           </>
-        )}
-
-        {tab === "results" && (
-          <div className="results">
-            {!results && <div className="empty">Ask for something nearby and results will show here.</div>}
-            {results && results.length === 0 && <div className="empty">Nothing found nearby. Try another need.</div>}
-            {results && results.map((r, i) => <ResultCard key={i} r={r} i={i} />)}
-          </div>
         )}
 
         {tab === "trip" && (
@@ -388,6 +403,8 @@ function App() {
 
         {tab === "account" && <AccountView account={account} msg={authMsg} onSubmit={doAuth} onLogout={logout} />}
       </section>
+
+      <ResultsPopup open={popup} title={meta.title} results={results} fallback={meta.img} onClose={() => setPopup(false)} />
 
       <aside className={"panel" + (chatOpen ? " open" : "")}>
         <div className="phead">
