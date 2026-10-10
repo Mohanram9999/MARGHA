@@ -70,7 +70,7 @@ MARGHA brings search, conversational assistance, authentication, and category-ba
 | Supabase | Authentication and backend services |
 | Render | Application hosting and deployment |
 | Claude | AI-assisted development |
-| ChatGPT | AI-assisted development, debugging, and ideation |
+| ChatGPT | AI-assisted development|
 
 ## ⚙️ How It Works
 
